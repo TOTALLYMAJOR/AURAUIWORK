@@ -1,0 +1,47 @@
+.staffing-module { min-width: 0; padding: 28px; max-width: 1500px; width: 100%; margin: 0 auto; line-height: 1.5; }
+.staffing-header h1 { font-size: clamp(30px, 4vw, 46px); letter-spacing: -.04em; line-height: 1.1; margin: 12px 0; }
+.staffing-header > p:last-child { color: var(--muted); font-size: 17px; }
+.staffing-boundary { border-left: 3px solid var(--blue); background: var(--bg-2); color: var(--muted); padding: 12px 16px; }
+.staffing-tools { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-top: 24px; }
+.staffing-module button, .staffing-module input, .staffing-module select { border: 1px solid var(--line); border-radius: 8px; background: var(--bg-2); padding: 10px 12px; }
+.staffing-module input:focus-visible, .staffing-module select:focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; }
+.staffing-module button:hover:not(:disabled) { border-color: var(--muted); }
+.staffing-module button[aria-pressed="true"] { border-color: var(--teal); background: var(--card-2); }
+.staffing-module button:disabled { color: var(--muted); border-style: dashed; }
+.staffing-tools label { display: grid; gap: 6px; max-width: 100%; color: var(--muted); }
+.staffing-tools select, .staffing-tools input { width: 100%; min-width: 0; color: var(--text); }
+.staffing-shifts, .staffing-roster { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.staffing-module .staffing-card { padding: 18px; display: flex; flex-direction: column; align-items: flex-start; text-align: left; gap: 6px; background: var(--card); }
+.staffing-card strong { font-size: 22px; letter-spacing: -.03em; line-height: 1.2; margin: 4px 0; }
+.staffing-muted, .staffing-certs { color: var(--muted); }
+.staffing-attention { color: var(--amber); }
+.staffing-bar { height: 4px; width: 100%; background: var(--line); margin: 10px 0; }
+.staffing-bar i { display: block; height: 100%; background: var(--blue); }
+.staffing-split, .staffing-inventory-layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 22px; align-items: start; }
+.staffing-inventory-layout { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+.staffing-detail { padding: 22px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
+.staffing-detail h2 { margin: 6px 0 14px; font-size: 23px; line-height: 1.2; letter-spacing: -.03em; }
+.staffing-detail > p { color: var(--muted); }
+.staffing-detail > .staffing-attention { color: var(--amber); }
+.staffing-detail dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.staffing-detail dt { color: var(--faint); font-size: 12px; }
+.staffing-detail dd { margin: 4px 0 0; }
+.staffing-action { display: inline-block; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; color: var(--text); background: var(--bg-2); text-decoration: none; }
+.staffing-stock-list { list-style: none; padding: 0; }
+.staffing-stock-list li { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.staffing-offer, .staffing-pull { margin-top: 22px; }
+.staffing-offer > a { display: block; margin-top: 16px; }
+.staffing-draft { margin-top: 18px; border-top: 1px solid var(--line); }
+.staffing-table { overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.staffing-table table { width: 100%; border-collapse: collapse; min-width: 440px; }
+.staffing-table th, .staffing-table td { text-align: left; padding: 14px; border-bottom: 1px solid var(--line); }
+.staffing-table th { color: var(--muted); font-size: 12px; font-weight: 500; }
+.staffing-table td > span { display: block; color: var(--muted); margin-top: 4px; }
+.staffing-table td > span.staffing-attention { color: var(--amber); }
+.staffing-table .event-link { border: 0; padding: 4px 0; background: transparent; }
+.staffing-selected-row { background: var(--card-2); }
+.staffing-empty { padding: 16px; }
+.staffing-pull ul { list-style: none; padding: 0; }
+.staffing-pull li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 0; }
+@media (max-width: 900px) { .staffing-shifts, .staffing-roster { grid-template-columns: repeat(2, minmax(0, 1fr)); } .staffing-split, .staffing-inventory-layout { grid-template-columns: 1fr; } }
+@media (max-width: 540px) { .staffing-module { padding: 18px 14px; } .staffing-shifts, .staffing-roster { grid-template-columns: 1fr; } .staffing-tools label { width: 100%; } .staffing-detail { padding: 18px; } }

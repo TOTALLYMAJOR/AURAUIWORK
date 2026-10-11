@@ -1,10 +1,13 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { CalendarCheck, LayoutDashboard, UtensilsCrossed } from "lucide-react";
+import { CalendarCheck, LayoutDashboard, UtensilsCrossed, Users, Package, ClipboardList } from "lucide-react";
 
 const links = [
   { to: "/", label: "Command", icon: LayoutDashboard, end: true },
   { to: "/menu", label: "Menu", icon: UtensilsCrossed, end: false },
   { to: "/reservations", label: "Bookings", icon: CalendarCheck, end: false },
+  { to: "/staffing", label: "Staffing", icon: ClipboardList, end: false },
+  { to: "/roster", label: "Roster", icon: Users, end: false },
+  { to: "/inventory", label: "Inventory", icon: Package, end: false },
 ];
 
 export default function Shell() {

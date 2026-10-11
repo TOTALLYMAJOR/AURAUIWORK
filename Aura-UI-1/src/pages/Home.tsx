@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import Disclosure from "../components/Disclosure";
 import { events, money, stageCounts, type EventRecord, type QueueView } from "../data";
@@ -14,7 +14,7 @@ type Role = (typeof roles)[number];
 
 const roleCopy: Record<Role, { view: QueueView; note: string }> = {
   Owner: { view: "action", note: "Owner lens: one cutoff at a time. Details stay closed until you open an event." },
-  Sales: { view: "sales", note: "Sales lens: quotes and follow-ups only. Production holds are hidden." },
+  Sales: { view: "sales", note: "Sales lens: starts with quotes and follow-ups. Choose another queue to review other work." },
   Kitchen: { view: "upcoming", note: "Kitchen lens: upcoming service. Packing and unpublished BEOs come first." },
   Finance: { view: "action", note: "Finance lens: deposit exceptions are marked. Other checks stay collapsed." },
 };
@@ -26,11 +26,11 @@ function tone(status: string) {
   return "muted";
 }
 
-function focusFor(role: Role) {
-  if (role === "Sales") return events.find((event) => event.queue.includes("sales")) ?? events[0];
-  if (role === "Kitchen") return events.find((event) => event.id === "corp-lunch") ?? events[0];
-  if (role === "Finance") return events.find((event) => event.depositOverdue > 0) ?? events[0];
-  return events.find((event) => event.urgency === "critical" && event.blocker?.cannotProceed) ?? events[0];
+function focusFor(role: Role, rows: EventRecord[]) {
+  if (role === "Sales") return rows.find((event) => event.queue.includes("sales")) ?? rows[0];
+  if (role === "Kitchen") return rows.find((event) => event.workstreams.some((stream) => stream.name === "Kitchen" && stream.status === "blocked")) ?? rows[0];
+  if (role === "Finance") return rows.find((event) => event.depositOverdue > 0) ?? rows[0];
+  return rows.find((event) => event.urgency === "critical" && event.blocker?.cannotProceed) ?? rows[0];
 }
 
 function initialSection(event: EventRecord, role: Role) {
@@ -46,8 +46,6 @@ export default function Home() {
   const [role, setRole] = useState<Role>("Owner");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [range, setRange] = useState("Next 14 days");
-  const [location, setLocation] = useState("Harbor kitchen");
   const [openMetric, setOpenMetric] = useState<string | null>(null);
   const [showHealth, setShowHealth] = useState(false);
   const [showStages, setShowStages] = useState(false);
@@ -55,30 +53,27 @@ export default function Home() {
   const [showWindow, setShowWindow] = useState(false);
   const [openLower, setOpenLower] = useState<string | null>(null);
   const [roleNote, setRoleNote] = useState(roleCopy.Owner.note);
+  const openerRef = useRef<HTMLElement | null>(null);
+  const eventButtons = useRef(new Map<string, HTMLButtonElement>());
+  const queueControlRef = useRef<HTMLButtonElement>(null);
 
-  const selected = events.find((event) => event.id === selectedId) ?? null;
-  const focus = focusFor(role);
-
-  const rows = useMemo(() => {
+  const matchingEvents = useMemo(() => {
     return events.filter((event) => {
-      if (!event.queue.includes(view)) return false;
       const blob = `${event.name} ${event.client} ${event.owner} ${event.nextAction}`.toLowerCase();
-      return blob.includes(query.toLowerCase());
+      return blob.includes(query.trim().toLowerCase());
     });
-  }, [view, query]);
-
-  const counts = useMemo(() => {
-    return views.map((item) => ({
-      ...item,
-      count: events.filter((event) => {
-        if (!event.queue.includes(item.id)) return false;
-        const blob = `${event.name} ${event.client} ${event.owner} ${event.nextAction}`.toLowerCase();
-        return blob.includes(query.toLowerCase());
-      }).length,
-    }));
   }, [query]);
+  const rows = matchingEvents.filter((event) => event.queue.includes(view));
+  const selected = rows.find((event) => event.id === selectedId) ?? null;
+  const focus = focusFor(role, rows);
+  const scopeLabel = `${views.find((item) => item.id === view)!.label} · ${query.trim() ? `matches “${query.trim()}”` : "all sample records"}`;
 
-  const booked = events.filter((event) => event.bookedValue > 0);
+  const counts = views.map((item) => ({
+      ...item,
+      count: matchingEvents.filter((event) => event.queue.includes(item.id)).length,
+    }));
+
+  const booked = rows.filter((event) => event.bookedValue > 0);
   const metrics = [
     {
       id: "booked",
@@ -94,40 +89,52 @@ export default function Home() {
     {
       id: "deposits",
       label: "Deposits overdue",
-      value: money(events.reduce((sum, event) => sum + event.depositOverdue, 0)),
+      value: money(rows.reduce((sum, event) => sum + event.depositOverdue, 0)),
       note: "Past due date",
       calc: "Required deposits whose due date has passed and whose customer payment is not succeeded.",
       kind: "Actual",
       missing: "None",
       updated: "2 min ago",
-      events: events.filter((event) => event.depositOverdue > 0).map((event) => event.name),
+      events: rows.filter((event) => event.depositOverdue > 0).map((event) => event.name),
     },
     {
       id: "contribution",
       label: "Projected contribution",
-      value: money(events.reduce((sum, event) => sum + event.projectedContribution, 0)),
+      value: money(rows.reduce((sum, event) => sum + event.projectedContribution, 0)),
       note: "Not cash",
       calc: "Event revenue minus recipe, staffing, and known rental costs. Missing costs are listed, not estimated.",
       kind: "Projected",
-      missing: "Rentals and overtime on 3 events",
+      missing: rows.filter((event) => event.missingCosts.length).map((event) => `${event.name}: ${event.missingCosts.join(", ")}`).join("; ") || "None listed",
       updated: "18 min ago",
-      events: events.map((event) => event.name),
+      events: rows.map((event) => event.name),
     },
     {
       id: "action",
       label: "Needs action",
-      value: String(events.filter((event) => event.queue.includes("action")).length),
+      value: String(rows.filter((event) => event.queue.includes("action")).length),
       note: "Distinct events",
       calc: "Count of events in Needs action. Not a dollar total and not added to the figures above.",
       kind: "Operational",
       missing: "None",
       updated: "Just now",
-      events: events.filter((event) => event.queue.includes("action")).map((event) => event.name),
+      events: rows.filter((event) => event.queue.includes("action")).map((event) => event.name),
     },
   ];
 
-  const quotes = events.filter((event) => event.queue.includes("sales"));
-  const thin = events.filter((event) => event.bookedValue > 0 && event.margin < event.targetMargin);
+  const quotes = matchingEvents.filter((event) => event.queue.includes("sales"));
+  const thin = matchingEvents.filter((event) => event.bookedValue > 0 && event.margin < event.targetMargin);
+
+  const closeEvent = useCallback(() => {
+    setSelectedId(null);
+    const opener = openerRef.current;
+    const target = opener?.isConnected ? opener : eventButtons.current.get(selectedId ?? "") ?? queueControlRef.current;
+    target?.focus();
+  }, [selectedId]);
+
+  function changeQuery(value: string) {
+    setQuery(value);
+    setSelectedId(null);
+  }
 
   function chooseRole(next: Role) {
     setRole(next);
@@ -138,12 +145,17 @@ export default function Home() {
   }
 
   function openEvent(id: string) {
+    const event = matchingEvents.find((item) => item.id === id);
+    if (!event) return;
+    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (selectedId === id) document.getElementById("event-detail")?.querySelector<HTMLButtonElement>("button")?.focus();
+    if (!event.queue.includes(view)) setView(event.queue[0]);
     setSelectedId(id);
     setOpenLower(null);
   }
 
   return (
-    <div className={`workspace ${selected ? "with-drawer" : ""}`}>
+    <main className={`workspace ${selected ? "with-drawer" : ""}`}>
       <header className="topbar">
         <div>
           <p className="kicker">Command center · {role}</p>
@@ -152,7 +164,7 @@ export default function Home() {
         <div className="top-controls">
           <label>
             Role
-            <select value={role} onChange={(e) => chooseRole(e.target.value as Role)}>
+            <select aria-label="Role" value={role} onChange={(e) => chooseRole(e.target.value as Role)}>
               {roles.map((item) => (
                 <option key={item}>{item}</option>
               ))}
@@ -160,41 +172,39 @@ export default function Home() {
           </label>
           <label className="search">
             Search
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Event, owner, action" />
+            <input value={query} onChange={(e) => changeQuery(e.target.value)} placeholder="Event, owner, action" />
           </label>
-          <button type="button" className={`window-chip ${showWindow ? "on" : ""}`} onClick={() => setShowWindow((open) => !open)}>
-            {range} · {location}
+          <button type="button" aria-expanded={showWindow} aria-controls="sample-scope" className={`window-chip ${showWindow ? "on" : ""}`} onClick={() => setShowWindow((open) => !open)}>
+            Sample scope
           </button>
         </div>
       </header>
 
       {showWindow && (
-        <div className="window-panel">
+        <div id="sample-scope" className="window-panel">
           <label>
             Date range
-            <select value={range} onChange={(e) => setRange(e.target.value)}>
-              <option>Next 14 days</option>
-              <option>This week</option>
-              <option>This month</option>
+            <select aria-label="Date range" disabled aria-describedby="scope-limitation">
+              <option>Unavailable</option>
             </select>
           </label>
           <label>
-            Location
-            <select value={location} onChange={(e) => setLocation(e.target.value)}>
-              <option>Harbor kitchen</option>
-              <option>All kitchens</option>
+            Kitchen
+            <select aria-label="Kitchen" disabled aria-describedby="scope-limitation">
+              <option>Unavailable</option>
             </select>
           </label>
-          <p>Figures below use this window. They are not added together.</p>
+          <p id="scope-limitation">Service dates and kitchen assignments are unavailable in these sample records. Venue names are not kitchen assignments. No date or kitchen filter is applied.</p>
         </div>
       )}
 
-      <p className="role-note" role="status">
+      <p className="role-note">
         {roleNote}
-        {query ? ` Showing matches for “${query}”.` : ""}
+        {` Sample data · Snapshot and next decision: ${scopeLabel}. Queue counts and secondary queues match search across views. Company-wide examples are labeled separately.`}
       </p>
 
-      <section className={`focus-card ${focus.urgency}`} aria-label="Next decision">
+      <section className={`focus-card ${focus?.urgency ?? ""}`} aria-label="Next decision">
+        {focus ? <>
         <div>
           <p className="kicker">{focus.blocker?.cannotProceed ? "Cannot proceed" : "Next decision"} · {focus.blocker?.resolveBy ?? focus.deadlineNote}</p>
           <h2>{focus.name}</h2>
@@ -203,16 +213,17 @@ export default function Home() {
         <button type="button" className="solid" onClick={() => openEvent(focus.id)}>
           {selectedId === focus.id ? "Open in panel" : "Resolve this"}
         </button>
+        </> : <div><h2>No events in this view</h2><p>Change the queue or search to find an event. No action is suggested.</p></div>}
       </section>
 
       <button type="button" className="health-chip" aria-expanded={showHealth} onClick={() => setShowHealth((open) => !open)}>
-        <span className="dot live" /> Payments live
-        <span className="dot failed" /> Inventory sync failed
+        <span className="dot live" /> Sample payment status
+        <span className="dot failed" /> Sample inventory failure
         <em>{showHealth ? "Hide status" : "Data status"}</em>
       </button>
       {showHealth && (
         <p className="data-status">
-          Payments updated 2 minutes ago. Inventory sync failed 18 minutes ago. Role view: {role}. Booked value, overdue
+          Illustrative company-wide status, not live connections: payments updated 2 minutes ago; inventory sync failed 18 minutes ago. Role view: {role}. Booked value, overdue
           deposits, and projected contribution are separate. They are not added together.
         </p>
       )}
@@ -235,10 +246,10 @@ export default function Home() {
                 <div className="calc">
                   <p>{metric.calc}</p>
                   <p>
-                    Window: {range} · {location} · {metric.kind}
+                    Scope: {scopeLabel} · {metric.kind}
                   </p>
                   <p>
-                    Missing inputs: {metric.missing} · Updated {metric.updated}
+                    Missing inputs: {metric.missing} · Sample update: {metric.updated}
                   </p>
                   <p>Included: {metric.events.join(", ") || "None"}</p>
                 </div>
@@ -250,11 +261,11 @@ export default function Home() {
 
       <Disclosure
         label="Events by stage"
-        hint={`${stageCounts.reduce((sum, stage) => sum + stage.count, 0)} company-wide · not this queue`}
+        hint={`${stageCounts.reduce((sum, stage) => sum + stage.count, 0)} company-wide example · not filtered`}
         open={showStages}
         onToggle={() => setShowStages((open) => !open)}
       >
-        <ol className="stage-list">
+        <ol className="stage-list" tabIndex={0} aria-label="Company-wide sample stage counts">
           {stageCounts.map((stage) => (
             <li key={stage.label}>
               <strong>{stage.count}</strong>
@@ -266,13 +277,13 @@ export default function Home() {
 
       <section className="queue" aria-label="Priority queue">
         <div className="queue-head">
-          <div className="tabs" role="tablist">
+          <div className="tabs" role="group" aria-label="Queue view">
             {counts.map((item) => (
               <button
                 key={item.id}
                 type="button"
-                role="tab"
-                aria-selected={view === item.id}
+                ref={view === item.id ? queueControlRef : undefined}
+                aria-pressed={view === item.id}
                 className={view === item.id ? "on" : ""}
                 onClick={() => {
                   setView(item.id);
@@ -289,14 +300,14 @@ export default function Home() {
           </button>
         </div>
         <p className="queue-hint">
-          {rows.length} shown. {selected ? `${selected.name} is open in the panel.` : "Select a row to open one event. Nothing else expands."}
+          {rows.length} shown. {selected ? `${selected.name} is open in the panel.` : "Choose an event name or next action to open its details."}
           {query && (
-            <button type="button" className="text-action" onClick={() => setQuery("")}>
+            <button type="button" className="text-action" onClick={() => changeQuery("")}>
               Clear search
             </button>
           )}
         </p>
-        <div className="table-wrap">
+        <div className="table-wrap" role="region" aria-label="Event queue table" tabIndex={0}>
           <table>
             <thead>
               <tr>
@@ -318,10 +329,9 @@ export default function Home() {
                 <tr
                   key={event.id}
                   className={`${event.id === selectedId ? "selected" : ""} ${role === "Finance" && event.depositOverdue > 0 ? "money-hot" : ""}`}
-                  onClick={() => openEvent(event.id)}
                 >
                   <td>
-                    <strong>{event.name}</strong>
+                    <button type="button" className="event-link" aria-label={`Open ${event.name}`} aria-controls="event-detail" aria-expanded={selectedId === event.id} ref={(button) => { if (button) eventButtons.current.set(event.id, button); else eventButtons.current.delete(event.id); }} onClick={() => openEvent(event.id)}>{event.name}</button>
                     <span>
                       {event.client} · {event.type}
                     </span>
@@ -345,10 +355,8 @@ export default function Home() {
                     <button
                       type="button"
                       className="text-action"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEvent(event.id);
-                      }}
+                      aria-label={`${event.nextAction} for ${event.name}`}
+                      onClick={() => openEvent(event.id)}
                     >
                       {event.nextAction}
                     </button>
@@ -417,7 +425,7 @@ export default function Home() {
           <button type="button" className="lower-toggle" aria-expanded={openLower === "capacity"} onClick={() => setOpenLower(openLower === "capacity" ? null : "capacity")}>
             <span>
               <p className="kicker">Capacity</p>
-              <strong>3 constraints this week</strong>
+              <strong>3 sample capacity constraints · not filtered</strong>
             </span>
             <em>{openLower === "capacity" ? "Hide" : "Show"}</em>
           </button>
@@ -439,16 +447,17 @@ export default function Home() {
           key={selected.id}
           event={selected}
           role={role}
-          onClose={() => setSelectedId(null)}
+          onClose={closeEvent}
           onNext={() => {
             const index = rows.findIndex((item) => item.id === selected.id);
-            const pool = rows.length ? rows : events;
-            const next = pool[(index + 1) % pool.length];
+            const next = rows[(index + 1) % rows.length];
+            if (!next) return;
+            openerRef.current = eventButtons.current.get(next.id) ?? queueControlRef.current;
             setSelectedId(next.id);
           }}
         />
       )}
-    </div>
+    </main>
   );
 }
 
@@ -456,9 +465,9 @@ function Readiness({ event }: { event: EventRecord }) {
   const checks = event.workstreams.flatMap((stream) => stream.checks);
   const done = checks.filter((check) => check.done).length;
   return (
-    <span className="meter" title={`${done} of ${checks.length} checks complete`}>
+    <span className="meter" role="img" aria-label={`${done} of ${checks.length} checks complete`} title={`${done} of ${checks.length} checks complete`}>
       {checks.map((check, index) => (
-        <i key={`${check.label}-${index}`} className={check.done ? "done" : ""} />
+        <i aria-hidden="true" key={`${check.label}-${index}`} className={check.done ? "done" : ""} />
       ))}
     </span>
   );
@@ -485,6 +494,9 @@ function EventDrawer({
 
   useEffect(() => {
     closeRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
     function onKey(keyEvent: KeyboardEvent) {
       if (keyEvent.key === "Escape") onClose();
     }
@@ -504,7 +516,7 @@ function EventDrawer({
   }
 
   return (
-    <aside className="drawer" aria-label="Event detail">
+    <aside id="event-detail" className="drawer" aria-label="Event detail">
       <div className="drawer-top">
         <div>
           <p className="kicker">Event workspace</p>
@@ -518,7 +530,7 @@ function EventDrawer({
         </button>
       </div>
 
-      <ol className="spine" aria-label="Event progress">
+      <ol className="spine" tabIndex={0} aria-label="Event progress">
         {event.spine.map((step) => (
           <li key={step.label} className={`${step.state}${event.urgency === "critical" && step.state === "blocked" ? " hot" : ""}`}>
             <i />

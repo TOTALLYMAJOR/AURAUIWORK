@@ -6,12 +6,12 @@
   --line: rgba(255, 255, 255, 0.1);
   --text: #f4f7fb;
   --muted: #93a0b3;
-  --faint: #6d7b8e;
+  --faint: #8998ac;
   --amber: #ffb800;
   --amber-dim: rgba(255, 184, 0, 0.14);
   --teal: #4fd1c5;
   --teal-dim: rgba(79, 209, 197, 0.14);
-  --red: #ff5d6c;
+  --red: #ff7b88;
   --red-dim: rgba(255, 93, 108, 0.14);
   --blue: #7eb6ff;
   --shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
@@ -29,6 +29,12 @@ body {
 }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
+button:focus-visible, a:focus-visible, [tabindex="0"]:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 3px;
+}
+button:disabled { cursor: default; }
+.event-link { background: transparent; border: 0; padding: 0; text-align: left; font-weight: 700; text-decoration: underline; }
 a { color: var(--teal); }
 
 .shell {
@@ -273,8 +279,6 @@ input:focus, select:focus, textarea:focus {
 .stage-list li { min-width: 72px; text-align: center; }
 .stage-list strong { display: block; color: var(--teal); font-size: 20px; }
 .stage-list span { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
-  border-radius: 14px;
-}
 .drawer h2, .drawer h3, article h3, .panel h2 {
   margin: 0;
   font-size: 16px;
@@ -392,6 +396,7 @@ article li, .booking-list li, .evidence li { padding: 7px 0; border-bottom: 1px 
   gap: 12px;
 }
 .drawer h2 { font-size: 22px; letter-spacing: -0.03em; }
+.drawer > * { flex-shrink: 0; }
 .spine { overflow-x: auto; padding-bottom: 4px; }
 .spine li { min-width: 64px; }
 .issue, .primary-action, .pay-model, .stream, .margin-alert, .ai { padding: 12px; }
@@ -450,7 +455,7 @@ legend { color: var(--faint); padding: 0 6px; }
 @media (max-width: 1100px) {
   .shell { grid-template-columns: 1fr; }
   .sidebar { position: relative; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
-  .side-nav { flex-direction: row; }
+  .side-nav { flex-direction: row; flex-wrap: wrap; }
   .operator-card { display: none; }
   .workspace, .workspace.with-drawer, .snapshot, .lower, .page-grid { grid-template-columns: 1fr; }
   .drawer { grid-column: 1; grid-row: auto; position: relative; top: 0; max-height: none; }
